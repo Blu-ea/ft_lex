@@ -21,3 +21,10 @@ cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
+
+# Ide files
+.vscode/
+
+# output files
+lex.yy.c
+a.out
