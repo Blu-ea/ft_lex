@@ -30,7 +30,7 @@ options =
         "Show The help Menue"
     ]
 
-processOpts :: [String] -> Either String (Options, [String]) 
+processOpts :: [String] -> Either String (Options, [FilePath]) 
 processOpts argv = 
     case getOpt Permute options argv of
         (opt, nopt, []) -> return (foldl (flip id) defaultOption opt, nopt)
@@ -39,3 +39,6 @@ processOpts argv =
 usageString :: String
 usageString = usageInfo header options
     where header = "Usage: ic [OPTION...] files..."
+
+printUsage :: IO()
+printUsage = putStr usageString

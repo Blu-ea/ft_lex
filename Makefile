@@ -15,3 +15,5 @@ $(LIB_NAME):
 
 compile: ## This is used to compile the .c with the .so
 	gcc test.c -L ./lib -ll -Wl,-rpath=./lib
+
+.PHONY: compile all

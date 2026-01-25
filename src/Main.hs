@@ -1,21 +1,25 @@
 module Main (main) where
 
-import ProgOption (processOpts)
+import ProgOption ( Options(Options), processOpts, printUsage )
 import System.Environment (getArgs)
-import System.IO ( openFile , hGetContents)
-import GHC.Read (readField)
+import InputLex
+import Data.Maybe
+import Control.Applicative
+
 
 main :: IO ()
 main = do
     res <- processOpts <$> getArgs
     case res of
-        Left errStr -> putStrLn errStr
+        Left errStr -> putStr errStr
         Right (opt, stropt) -> do
-            print opt
-            getInput stropt >>= putStrLn
-            return ()
+            runProgram opt stropt
 
-
-getInput :: [FilePath] -> IO String
-getInput [] = getContents
-getInput args = concat <$> mapM readFile args
+runProgram :: Options -> [FilePath] -> IO()
+runProgram (Options _ _ True) _ = printUsage
+runProgram _ input = do
+    t <- getInput input
+    let a = runParser (many defParse) t
+    print . fst $ fromJust a
+    print . snd $ fromJust a
+    return ()
