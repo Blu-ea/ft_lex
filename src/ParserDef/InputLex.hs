@@ -3,7 +3,7 @@ module ParserDef.InputLex where
 
 import Control.Applicative
 
-import ParserDef.InputChar ( InputString, InputChar(InputChar) )
+import ParserDef.InputChar ( InputString, InputChar(InputChar), getPose )
 import ParserDef.Parser ( Parser (Parser) )
 import ParserDef.LexDefinition
     ( Rule(..), Definition(..), LexFile(LexFile) )
@@ -34,34 +34,34 @@ consumeChar :: Char -> Parser Char
 consumeChar c = Parser ( trace ("Consume"++[c]) charP)
     where
         charP [] = Left $ "Expected `" ++ [c] ++ "`, but found end of file"
-        charP ((InputChar x (line, file)): xs) | x == c    = Right (c,xs)
-                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ show line ++ ": Unexpected char `"++ show x ++"`") 
+        charP ((InputChar x (pose, file)): xs)  | x == c    = Right (c,xs)
+                                                | otherwise = Left ("Error: " ++ file ++ ':' : getPose pose ++ ": Unexpected char `"++ show x ++"`") 
 
 consumeCharFromString :: String -> Parser Char
 consumeCharFromString s = Parser charP
     where
         charP [] = Left $ "Expected any from`" ++ s ++ "`, but found end of file"
-        charP ((InputChar x (line, file)): xs) | x `elem` s = Right (x, xs)
-                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ show line ++ ": Unexpected char `"++ show x ++"`")
+        charP ((InputChar x (pose, file)): xs) | x `elem` s = Right (x, xs)
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
 
 consumeAnyChar :: Parser Char
 consumeAnyChar = Parser $ \case
         [] -> Left "End of file"
-        (InputChar x _ : xs) -> Right (x, xs)
+        (InputChar x _ : xs) -> trace ("Consume " ++ show x )Right (x, xs)
 
 consumeNotChar :: Char -> Parser Char
 consumeNotChar c = Parser charP
     where
         charP [] = Left "End of file"
-        charP ((InputChar x (line, file)): xs) | x /= c    = Right (x, xs)
-                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ show line ++ ": Unexpected char `"++ show x ++"`")
+        charP ((InputChar x (pose, file)): xs) | x /= c    = Right (x, xs)
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
 
 consumeNotCharFromString :: String -> Parser Char
 consumeNotCharFromString s = Parser charP
     where
         charP [] = Left "End of File"
-        charP ((InputChar x (line, file)): xs) | x `notElem` s = Right (x, xs)
-                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ show line ++ ": Unexpected char `"++ show x ++"`")
+        charP ((InputChar x (pose, file)): xs) | x `notElem` s = Right (x, xs)
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
 
 
 consumeString :: String -> Parser String
@@ -76,7 +76,7 @@ consumeUntilS end = go
         go = (lookAhead (consumeString end) $> []) <|> ((:) <$> consumeAnyChar <*> go)
 
 consumeUntilEither :: String -> Parser String
-consumeUntilEither endC = go
+consumeUntilEither endC = trace ("Test Here ?? until" ++ endC) go
     where
         go = lookAhead (consumeCharFromString endC $> [])<|> ((:) <$> consumeAnyChar <*> go)
 
@@ -111,9 +111,13 @@ blankLines =
 
 
 consumeBrackets :: Parser String
-consumeBrackets = consumeChar '{' *> (concat <$> many consumeInner) <* consumeChar '}'
-    where consumeInner = 
-            consumeBrackets <|> many (consumeNotCharFromString "{}")
+consumeBrackets = do
+    open <- consumeChar '{'
+    inner <- concat <$> many innerBracket
+    close <- consumeChar '}'
+    return (open : inner ++ [close])
+    where 
+        innerBracket = (:[]) <$> checkIfNotCharThenConsume "{}" consumeAnyChar <|> consumeBrackets
 
 consumeDQuotes :: Parser String
 consumeDQuotes = consumeChar '"' *> consumeUntil '"' <* consumeChar '"'
@@ -157,6 +161,6 @@ lexParse =
     LexFile
         <$> defParse
         <*  (blankLines *> sectionSeparator)
-        <*> trace "\n\nMaybe here 2 ?" ruleParse
-        <*  trace "\n\nMaybe here %% 3 ?" (blankLines *> traceShowId sectionSeparator)
-        <*> trace "\n\nMaybe here Anything left4 ?" many (traceShowId consumeAnyChar)
+        <*> trace "\n\n -- Start Rule Parse" ruleParse
+        <*  trace "\n\n -- Search SectionSeparator" (blankLines *> traceShowId sectionSeparator)
+        <*> trace "\n\n -- Start End point" many (traceShowId consumeAnyChar)
