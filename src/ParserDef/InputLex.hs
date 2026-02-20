@@ -120,7 +120,11 @@ consumeBrackets = do
         innerBracket = (:[]) <$> checkIfNotCharThenConsume "{}" consumeAnyChar <|> consumeBrackets
 
 consumeDQuotes :: Parser String
-consumeDQuotes = consumeChar '"' *> consumeUntil '"' <* consumeChar '"'
+consumeDQuotes = do
+    open <- consumeChar '"'
+    inner <- consumeUntil '"'
+    close <- consumeChar '"'
+    return (open : inner ++ [close])
 
 
 defParse :: Parser [Definition]
@@ -152,8 +156,8 @@ ruleParse =
     where
         rCode = RCode <$> (space *> (ss *> consumeUntil '\n' <* eol))
             <|> RCode <$> (consumeString "%{\n" *> consumeUntilS "\n%}\n" <* consumeString "\n%}\n")
-        rRule = RRule <$> (checkIfNotCharThenConsume " %" (consumeUntil ' ') <* ss) 
-                        <*> ( consumeBrackets <|> consumeUntil '\n') <* eol
+        rRule = RRule <$> (checkIfNotCharThenConsume " %" (concat <$> some (some (consumeNotCharFromString " \"") <|> consumeDQuotes)) <* ss)
+                        <*> (concat <$> some (some (consumeNotCharFromString "\n{}") <|> consumeBrackets)) <* eol
 
 
 lexParse :: Parser LexFile

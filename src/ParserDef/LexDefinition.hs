@@ -36,8 +36,12 @@ data Definition
 data Rule
     = RRule Regex Action
     | RCode CodeBlock
-    deriving Show
 
+instance Show Rule where
+    show (RRule regex action) = 
+        "RRule -> " ++ show regex ++ " <|> " ++ show action
+    show (RCode code) = 
+        "RCode -> " ++ show code
 data LexItem
     = Def Definition
     | RuleItem Rule
