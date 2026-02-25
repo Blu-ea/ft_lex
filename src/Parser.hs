@@ -1,21 +1,23 @@
-module ParserDef.Parser where
+module Parser where
 
-import ParserDef.InputChar (InputString)
 import Control.Applicative ( Alternative(empty, (<|>)) )
 
-
-
-newtype Parser a = Parser
-    { runParser 
-        :: InputString -> Either String (a, InputString) 
+{-|
+### This is a `Parser i o`  
+    - `i` is the Input-Type  
+    - `o` is the Output-Type  
+-}
+newtype Parser i o = Parser
+    { runParser
+        :: i -> Either String (o, i) 
     }
 
-instance Show (Parser a) where
+instance Show (Parser i a) where
     show _ = "<parser>"
 
 
 
-instance Functor Parser where
+instance Functor (Parser i) where
     -- fmap :: (a -> b) -> Parser a -> Parser b
     fmap f (Parser x)=
 
@@ -23,7 +25,7 @@ instance Functor Parser where
             (x', s') <- x s
             return (f x', s')
 
-instance Applicative Parser where
+instance Applicative (Parser i) where
     pure a = Parser $ \s -> Right (a, s)
 
 -- (<*>) :: Parser (a->b) -> Parser a -> Parser B
@@ -33,16 +35,16 @@ instance Applicative Parser where
             (x', s2) <- x s1
             return (f' x', s2)
 
-instance Monad Parser where
+instance Monad (Parser i) where
     (Parser x) >>= f =
         Parser $ \s -> do
             (a', s') <- x s
             runParser (f a') s'
 
-instance MonadFail Parser where
+instance MonadFail (Parser i) where
     fail s = Parser $ const $ Left s
 
-instance Alternative Parser where
+instance Alternative (Parser i) where
     empty = fail ""
 
     (Parser x) <|> (Parser y) = Parser $ \s ->

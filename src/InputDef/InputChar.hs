@@ -1,4 +1,4 @@
-module ParserDef.InputChar where
+module InputDef.InputChar where
 
 data InputChar = InputChar {
     value :: Char,

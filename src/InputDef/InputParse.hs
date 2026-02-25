@@ -1,15 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
-module ParserDef.InputLex where
+module InputDef.InputParse where
 
 import Control.Applicative
 
-import ParserDef.InputChar ( InputString, InputChar(InputChar), getPose )
-import ParserDef.Parser ( Parser (Parser) )
-import ParserDef.LexDefinition
-    ( Rule(..), Definition(..), LexFile(LexFile) )
+import InputDef.InputChar ( InputString, InputChar(InputChar), getPose )
+import InputDef.LexDefinition ( Rule(..), Definition(..), LexFile(LexFile) )
+import Parser ( Parser (Parser, runParser) )
 
 import Debug.Trace
 import Data.Functor (($>), void)
+import Data.Char ( isAlphaNum, isAlpha )
 
 
 getInput :: [FilePath] -> IO InputString
@@ -26,37 +26,37 @@ annotate ln cn f (c:cs) =
                                                         (if c == '\n' then 0 else cn + 1)
                                                         f cs
 
--- Parser a
+-- Parser i a
 --  is equivalent to
--- InputChar -> Either String (a, InputString)
+-- i -> Either String (a, i)
 
-consumeChar :: Char -> Parser Char
+consumeChar :: Char -> Parser [InputChar] Char
 consumeChar c = Parser ( trace ("Consume"++[c]) charP)
     where
         charP [] = Left $ "Expected `" ++ [c] ++ "`, but found end of file"
         charP ((InputChar x (pose, file)): xs)  | x == c    = Right (c,xs)
                                                 | otherwise = Left ("Error: " ++ file ++ ':' : getPose pose ++ ": Unexpected char `"++ show x ++"`") 
 
-consumeCharFromString :: String -> Parser Char
+consumeCharFromString :: String -> Parser [InputChar] Char
 consumeCharFromString s = Parser charP
     where
         charP [] = Left $ "Expected any from`" ++ s ++ "`, but found end of file"
         charP ((InputChar x (pose, file)): xs) | x `elem` s = Right (x, xs)
                                     | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
 
-consumeAnyChar :: Parser Char
+consumeAnyChar :: Parser [InputChar] Char
 consumeAnyChar = Parser $ \case
         [] -> Left "End of file"
         (InputChar x _ : xs) -> trace ("Consume " ++ show x )Right (x, xs)
 
-consumeNotChar :: Char -> Parser Char
+consumeNotChar :: Char -> Parser [InputChar] Char
 consumeNotChar c = Parser charP
     where
         charP [] = Left "End of file"
         charP ((InputChar x (pose, file)): xs) | x /= c    = Right (x, xs)
                                     | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
 
-consumeNotCharFromString :: String -> Parser Char
+consumeNotCharFromString :: String -> Parser [InputChar] Char
 consumeNotCharFromString s = Parser charP
     where
         charP [] = Left "End of File"
@@ -64,53 +64,63 @@ consumeNotCharFromString s = Parser charP
                                     | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
 
 
-consumeString :: String -> Parser String
+consumeString :: String -> Parser [InputChar] String
 consumeString = mapM consumeChar
 
-consumeUntil :: Char -> Parser String
+consumeUntil :: Char -> Parser [InputChar] String
 consumeUntil c = some (consumeNotChar c)
 
-consumeUntilS :: String -> Parser String
+consumeUntilS :: String -> Parser [InputChar] String
 consumeUntilS end = go
     where
         go = (lookAhead (consumeString end) $> []) <|> ((:) <$> consumeAnyChar <*> go)
 
-consumeUntilEither :: String -> Parser String
+consumeUntilEither :: String -> Parser [InputChar] String
 consumeUntilEither endC = trace ("Test Here ?? until" ++ endC) go
     where
         go = lookAhead (consumeCharFromString endC $> [])<|> ((:) <$> consumeAnyChar <*> go)
 
-lookAhead :: Parser a -> Parser a
+consumeUntilFalse :: (Char -> Bool) -> Parser [InputChar] String
+consumeUntilFalse f = some $ checkIfTrueThenConsume f consumeAnyChar
+
+lookAhead :: Parser i o -> Parser i o
 lookAhead (Parser p) = Parser $ \s -> do
     (a, _) <- p s
     Right (a, s)
 
-checkIfNotCharThenConsume :: [Char] -> Parser a -> Parser a
+checkIfNotCharThenConsume :: [Char] -> Parser [InputChar] a -> Parser [InputChar] a
 checkIfNotCharThenConsume s (Parser f) = Parser charP
     where
         charP [] = Left "End of file"
         charP xss@((InputChar x _): _)  | x `notElem` s = f xss
-                                        | otherwise = Left "Found ill formed data"
+                                        | otherwise = Left "Found ill formated data"
 
-sectionSeparator :: Parser String
+checkIfTrueThenConsume :: (Char -> Bool) -> Parser [InputChar] a -> Parser [InputChar] a
+checkIfTrueThenConsume f (Parser f') = Parser charP
+    where
+        charP [] = Left "End of file"
+        charP xss@(InputChar x _: _)    | f x = f' xss
+                                        | otherwise = Left "Found ill formated data"
+
+sectionSeparator :: Parser  [InputChar] String
 sectionSeparator = consumeString "%%" <|> Parser (\_ -> Left "Error: Expected section separator")
 
-space :: Parser Char
+space :: Parser [InputChar] Char
 space = consumeCharFromString " \t"
 
-ss :: Parser [Char]
+ss :: Parser [InputChar] [Char]
 ss = many space 
 
-eol :: Parser ()
+eol :: Parser [InputChar] ()
 eol = 
     void $ many space <* consumeChar '\n'
 
-blankLines :: Parser ()
+blankLines :: Parser [InputChar] ()
 blankLines = 
     void $ many eol
 
 
-consumeBrackets :: Parser String
+consumeBrackets :: Parser [InputChar] String
 consumeBrackets = do
     open <- consumeChar '{'
     inner <- concat <$> many innerBracket
@@ -119,7 +129,7 @@ consumeBrackets = do
     where 
         innerBracket = (:[]) <$> checkIfNotCharThenConsume "{}" consumeAnyChar <|> consumeBrackets
 
-consumeDQuotes :: Parser String
+consumeDQuotes :: Parser [InputChar] String
 consumeDQuotes = do
     open <- consumeChar '"'
     inner <- consumeUntil '"'
@@ -127,7 +137,7 @@ consumeDQuotes = do
     return (open : inner ++ [close])
 
 
-defParse :: Parser [Definition]
+defParse :: Parser [InputChar] [Definition]
 defParse = 
     many $ blankLines *> (
         Array
@@ -143,12 +153,13 @@ defParse =
             <$> (consumeString "%{\n" *> consumeUntilS "\n%}\n" <* consumeString "\n%}\n")
         <|>
         Macro
-            <$> consumeUntilEither " \t\n" -- Does not consume the white space, if a \n is found -> error
+            <$> checkIfTrueThenConsume isAlpha (consumeUntilFalse isAlphaNum) -- Does not consume the white space, if a \n is found -> error
+            <*  space
             <*  ss
             <*> checkIfNotCharThenConsume "\n" (consumeUntil '\n') <* eol
     )
 
-ruleParse :: Parser [Rule]
+ruleParse :: Parser [InputChar] [Rule]
 ruleParse = 
     (++)
         <$> many (blankLines *> rCode) 
@@ -160,7 +171,7 @@ ruleParse =
                         <*> (concat <$> some (some (consumeNotCharFromString "\n{}") <|> consumeBrackets)) <* eol
 
 
-lexParse :: Parser LexFile
+lexParse :: Parser [InputChar] LexFile
 lexParse =
     LexFile
         <$> defParse

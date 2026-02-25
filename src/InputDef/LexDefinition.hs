@@ -1,4 +1,4 @@
-module ParserDef.LexDefinition where 
+module InputDef.LexDefinition where 
 
 -- Atoms
 type Regex     = String
@@ -33,6 +33,14 @@ data Definition
     | Pointer
     deriving Show
 
+getDefinition :: String -> [Definition] -> Maybe String
+getDefinition _ [] = Nothing
+getDefinition word ((Macro key value):envs)
+    | key == word = Just value
+    | otherwise = getDefinition word envs
+getDefinition word (_: envs) = getDefinition word envs
+
+
 data Rule
     = RRule Regex Action
     | RCode CodeBlock
@@ -42,8 +50,3 @@ instance Show Rule where
         "RRule -> " ++ show regex ++ " <|> " ++ show action
     show (RCode code) = 
         "RCode -> " ++ show code
-data LexItem
-    = Def Definition
-    | RuleItem Rule
-    | UserCode String
-    deriving Show
