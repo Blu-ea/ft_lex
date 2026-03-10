@@ -3,6 +3,7 @@ module RegexEngine.RegexTokenType where
 
 data TokenRegex 
     = TChar Char
+    | TAny -- . -> Cannot be Null or Newline (0, 10)
     | TOr
     | TBracket String
     | TQuoting String
