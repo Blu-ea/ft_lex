@@ -39,15 +39,24 @@ translateRegex ('\\': r: rs) env = do
 translateRegex ('"': rs) env =
     let (insideQuote, afterQuote) = inQuote rs in do
     restTranslated <- translateRegex afterQuote env
-    return $ insideQuote ++ restTranslated
+    return $ '"' : insideQuote ++ '"' : restTranslated
     where
         inQuote [] = ([], [])
         inQuote ('"' : iQrs) = ([], iQrs)
         inQuote (c : iQrs) = 
             let (inside, after) = inQuote iQrs in 
                 (c : inside, after)
-translateRegex ('[': rs) env = Nothing -- TODO should not be found 
-
+translateRegex ['['] _ = Nothing  -- Used to avoid crashing with `tail rs`
+translateRegex ('[': rs) env = 
+    let (insideBracket, afterBracket) = inBracket $ tail rs in do
+    restTranslated <- translateRegex afterBracket env
+    return $ '[' : head rs : insideBracket ++ ']' : restTranslated
+    where
+        inBracket [] = ([], [])
+        inBracket (']' : iQrs) = ([], iQrs)
+        inBracket (c : iQrs) = 
+            let (inside, after) = inBracket iQrs in 
+                (c : inside, after)
 translateRegex (r:rs) env = do
     restTranslated <- translateRegex rs env
     return $ r : restTranslated
