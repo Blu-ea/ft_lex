@@ -46,20 +46,14 @@ translateRegex ('"': rs) env =
         inQuote (c : iQrs) = 
             let (inside, after) = inQuote iQrs in 
                 (c : inside, after)
-translateRegex ['['] _ = Nothing  -- Used to avoid crashing with `tail rs`
-translateRegex ('[': rs) env = 
-    let (insideBracket, afterBracket) = inBracket $ tail rs in do
-    restTranslated <- translateRegex afterBracket env
-    return $ '[' : head rs : insideBracket ++ ']' : restTranslated
-    where
-        inBracket [] = ([], [])
-        inBracket (']' : iQrs) = ([], iQrs)
-        inBracket (c : iQrs) = 
-            let (inside, after) = inBracket iQrs in 
-                (c : inside, after)
-translateRegex (r:rs) env = do
-    restTranslated <- translateRegex rs env
-    return $ r : restTranslated
+
+translateRegex ['['] _ = Nothing
+translateRegex ('[':trs) env = do
+    (inside, after) <- parseBracket trs
+    rest <- translateRegex after env
+    return $ '[' : inside ++ ']' : rest
+
+translateRegex (r:rs) env = (r :) <$> translateRegex rs env 
 
 takeWhileN :: Int -> (a -> Bool) -> [a] -> ([a], [a])
 takeWhileN 0 _ xs = ([], xs)
@@ -68,6 +62,46 @@ takeWhileN n f s@(c: xs)
             in (c:out, rest)
         | otherwise = ([], s)
 takeWhileN _ _ [] = ([], [])
+
+parseBracket :: String -> Maybe (String, String)
+parseBracket [] = Nothing
+parseBracket s =
+    let (start, rest) = case s of
+                ('^':xs) -> ("^", xs)
+                xs       -> ("", xs)
+    in do
+        (body, after) <- scanFirst rest
+        return (start ++ body, after)
+    where
+        scanFirst (']':xs) = scan xs "]"
+        scanFirst xs       = scan xs ""
+
+        scan [] _ = Nothing
+        scan (']':xs) acc = Just (acc, xs)
+
+        scan ('[':'.':xs) acc = do
+            (content, rest) <- takeUntil ".]" xs
+            scan rest (acc ++ "[." ++ content ++ ".]")
+        scan ('[':'=':xs) acc = do
+            (content, rest) <- takeUntil "=]" xs
+            scan rest (acc ++ "[=" ++ content ++ "=]")
+        scan ('[':':':xs) acc = do
+            (content, rest) <- takeUntil ":]" xs
+            scan rest (acc ++ "[:" ++ content ++ ":]")
+
+        scan ('\\': c :xs) acc = scan xs (acc ++ ['\\', c])
+        scan (c:xs) acc = scan xs (acc ++ [c])
+
+takeUntil :: String -> String -> Maybe (String, String)
+takeUntil _ [] = Nothing
+takeUntil pat s
+    | pat `prefix` s = Just ("", drop (length pat) s)
+    | otherwise = do
+        (inside, rest) <- takeUntil pat (tail s)
+        return (head s : inside, rest)
+
+prefix :: String -> String -> Bool
+prefix p s = take (length p) s == p
 
 -- If a ) is found without an opened one -> Error
 -- if a ] is found without an opened one -> is okay :D 
@@ -84,7 +118,7 @@ tokeniseChar = Parser charP
         charP ('\\' : 'r' : xs) = Right (TChar '\r', xs)
         charP ('\\' : 't' : xs) = Right (TChar '\t', xs)
         charP ('\\' : 'v' : xs) = Right (TChar '\v', xs)
-        charP ('\\' : 'x' : xs) = -- \x Digit 
+        charP ('\\' : 'x' : xs) = 
             let (nbstr, rest) = takeWhileN 2 isHexDigit xs
                 nb = if null nbstr 
                     then 0 
@@ -97,11 +131,14 @@ tokeniseChar = Parser charP
         charP ('(' : xs) = do
             (tokenList, rest) <- inParenthesis xs
             Right (TGroup tokenList, rest)
+        charP (')' : _) = Left "Parenthesis not opened"
+        
         charP ('"' : xs) = do  -- Need to convert that in a list of char (can be \ (same as above))
             (content, rest) <- inQuote xs
             Right (TQuoting content, rest)
-        charP ('|' : xs) = Right (TOr, xs)
-        charP (')' : _) = Left "Parenthesis not opened"
+
+        charP ('[' : rs) = Left ""
+
         charP ('*' : xs) = Right (TRepetionMany, xs)
         charP ('+' : xs) = Right (TRepetionSome, xs)
         charP ('?' : xs) = Right (TRepetionMaybe, xs)
@@ -109,22 +146,14 @@ tokeniseChar = Parser charP
                 ([], _) -> trace "empty" Left "Empty {}"
                 (inside, '}' : rest) -> trace "found" inCurly (span (/= ',') inside) rest
                 _ -> trace "closed" Left "Not closed {}"
-            -- inCurly break (/= '}') xs 
-            -- case break (/= '}') xs of
-            --     ([], _) -> Left "Patern {} empty"
-            --     (input, rest) | all isDigit input -> Right (TRepetionCustom (read input) (read input), rest)
-            --     (input, ',' : '}' :rest) | all isDigit input -> Right (TRepetionCustom (read input :: Int) (-1), rest )
-            --     (input, rest)  -> case break (== ',') input of
-            --         (a, ',' : b)
-            --             | not (null a)
-            --             , not (null b)
-            --             , all isDigit a
-            --             , all isDigit b
-            --             -> Right (TRepetionCustom (read a) (read b), rest)
-            --         _ -> Left "Invalid format" 
 
+        charP ('|' : xs) = Right (TOr, xs)
 
         charP ( x  : xs) = Right (TChar x, xs)
+
+        -- ============ --
+        -- End of CharP --
+        -- ============ --
 
         inQuote ('"' :  xs) = Right ([], xs)
         inQuote ('\\': x : xs) = do
