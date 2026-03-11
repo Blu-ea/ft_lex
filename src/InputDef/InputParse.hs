@@ -5,11 +5,12 @@ import Control.Applicative
 
 import InputDef.InputChar ( InputString, InputChar(InputChar), getPose )
 import InputDef.LexDefinition ( Rule(..), Definition(..), LexFile(LexFile) )
-import Parser ( Parser (Parser, runParser) )
+import Parser ( Parser (Parser) )
 
-import Debug.Trace
 import Data.Functor (($>), void)
 import Data.Char ( isAlphaNum, isAlpha )
+import System.IO (IOMode (ReadMode), withBinaryFile)
+import GHC.IO.Handle
 
 
 getInput :: [FilePath] -> IO InputString
@@ -17,7 +18,7 @@ getInput [] = return []
 getInput paths = concat <$> mapM readFileWithLines paths
     where
         readFileWithLines path =
-            annotate 1 1 path <$> readFile path
+            annotate 1 1 path <$> withBinaryFile path ReadMode hGetContents'
 
 annotate :: Int -> Int -> FilePath -> String -> InputString
 annotate _ _ _ [] = []
@@ -31,11 +32,11 @@ annotate ln cn f (c:cs) =
 -- i -> Either String (a, i)
 
 consumeChar :: Char -> Parser [InputChar] Char
-consumeChar c = Parser ( trace ("Consume"++[c]) charP)
+consumeChar c = Parser charP
     where
         charP [] = Left $ "Expected `" ++ [c] ++ "`, but found end of file"
         charP ((InputChar x (pose, file)): xs)  | x == c    = Right (c,xs)
-                                                | otherwise = Left ("Error: " ++ file ++ ':' : getPose pose ++ ": Unexpected char `"++ show x ++"`") 
+                                                | otherwise = Left ("Error: " ++ file ++ ':' : getPose pose ++ ": Unexpected char `"++ show x ++"`")
 
 consumeCharFromString :: String -> Parser [InputChar] Char
 consumeCharFromString s = Parser charP
@@ -47,7 +48,7 @@ consumeCharFromString s = Parser charP
 consumeAnyChar :: Parser [InputChar] Char
 consumeAnyChar = Parser $ \case
         [] -> Left "End of file"
-        (InputChar x _ : xs) -> trace ("Consume " ++ show x )Right (x, xs)
+        (InputChar x _ : xs) -> Right (x, xs)
 
 consumeNotChar :: Char -> Parser [InputChar] Char
 consumeNotChar c = Parser charP
@@ -76,7 +77,7 @@ consumeUntilS end = go
         go = (lookAhead (consumeString end) $> []) <|> ((:) <$> consumeAnyChar <*> go)
 
 consumeUntilEither :: String -> Parser [InputChar] String
-consumeUntilEither endC = trace ("Test Here ?? until" ++ endC) go
+consumeUntilEither endC = go
     where
         go = lookAhead (consumeCharFromString endC $> [])<|> ((:) <$> consumeAnyChar <*> go)
 
@@ -109,14 +110,14 @@ space :: Parser [InputChar] Char
 space = consumeCharFromString " \t"
 
 ss :: Parser [InputChar] [Char]
-ss = many space 
+ss = many space
 
 eol :: Parser [InputChar] ()
-eol = 
+eol =
     void $ many space <* consumeChar '\n'
 
 blankLines :: Parser [InputChar] ()
-blankLines = 
+blankLines =
     void $ many eol
 
 
@@ -126,7 +127,7 @@ consumeBrackets = do
     inner <- concat <$> many innerBracket
     close <- consumeChar '}'
     return (open : inner ++ [close])
-    where 
+    where
         innerBracket = (:[]) <$> checkIfNotCharThenConsume "{}" consumeAnyChar <|> consumeBrackets
 
 consumeDQuotes :: Parser [InputChar] String
@@ -138,10 +139,10 @@ consumeDQuotes = do
 
 
 defParse :: Parser [InputChar] [Definition]
-defParse = 
+defParse =
     many $ blankLines *> (
         Array
-            <$ consumeString "%array" <* eol 
+            <$ consumeString "%array" <* eol
         <|>
         Pointer
             <$ consumeString "%pointer" <* eol
@@ -160,9 +161,9 @@ defParse =
     )
 
 ruleParse :: Parser [InputChar] [Rule]
-ruleParse = 
+ruleParse =
     (++)
-        <$> many (blankLines *> rCode) 
+        <$> many (blankLines *> rCode)
         <*> some (blankLines *> rRule)
     where
         rCode = RCode <$> (space *> (ss *> consumeUntil '\n' <* eol))
@@ -176,6 +177,6 @@ lexParse =
     LexFile
         <$> defParse
         <*  (blankLines *> sectionSeparator)
-        <*> trace "\n\n -- Start Rule Parse" ruleParse
-        <*  trace "\n\n -- Search SectionSeparator" (blankLines *> traceShowId sectionSeparator)
-        <*> trace "\n\n -- Start End point" many (traceShowId consumeAnyChar)
+        <*> ruleParse
+        <*  (blankLines *> sectionSeparator)
+        <*> many consumeAnyChar
