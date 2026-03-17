@@ -9,6 +9,7 @@ import Control.Applicative (Alternative(many))
 import Debug.Trace
 import Numeric (readHex)
 import Data.Char
+import Data.List (isPrefixOf)
 
 
 -- The regex need to be translated before hand so it can be processe token wise.
@@ -95,13 +96,10 @@ parseBracket s =
 takeUntil :: String -> String -> Maybe (String, String)
 takeUntil _ [] = Nothing
 takeUntil pat s
-    | pat `prefix` s = Just ("", drop (length pat) s)
+    | pat `isPrefixOf` s = Just ("", drop (length pat) s)
     | otherwise = do
         (inside, rest) <- takeUntil pat (tail s)
         return (head s : inside, rest)
-
-prefix :: String -> String -> Bool
-prefix p s = take (length p) s == p
 
 -- If a ) is found without an opened one -> Error
 -- if a ] is found without an opened one -> is okay :D 
@@ -137,8 +135,13 @@ tokeniseChar = Parser charP
             (content, rest) <- inQuote xs
             Right (TQuoting content, rest)
 
-        charP ('[' : rs) = Left ""
-
+        charP ('[' : rs) = do
+            (inside, outside) <- getBracketContent rs
+            let inverted = "^" `isPrefixOf` inside
+            (content, rest) <- tokeniseBracketExpreFirst (if inverted then tail inside else inside)
+            if not $ null rest 
+                then Left "Ill Formed Bracket Expression"
+                else Right (TBracket inverted content , outside) 
         charP ('*' : xs) = Right (TRepetionMany, xs)
         charP ('+' : xs) = Right (TRepetionSome, xs)
         charP ('?' : xs) = Right (TRepetionMaybe, xs)
@@ -178,5 +181,40 @@ tokeniseChar = Parser charP
 
         isDigits s = not (null s) && all isDigit s
 
+        getBracketContent rs = case parseBracket rs of
+            Nothing -> Left "Bracket expression Not Closed"
+            Just x -> Right x
+
+        tokeniseBracketExpreFirst (']' :rs) = do
+            (otherToken, rest) <- tokeniseBracketExpre rs
+            Right (BChar ']' : otherToken, rest)
+        tokeniseBracketExpreFirst s = tokeniseBracketExpre s
+
+        tokeniseBracketExpre [] = Right ([], "")
+        tokeniseBracketExpre ('[':'.':rs) = do
+            (content, after) <- maybeToEither "Error `.]`" (takeUntil ".]" rs)
+            (otherToken, rest) <- tokeniseBracketExpre after
+            Right (BCollating content : otherToken, rest)
+        tokeniseBracketExpre ('[':':':rs) = do
+            (content, after) <- maybeToEither "Error `:]`" (takeUntil ":]" rs)
+            (otherToken, rest) <- tokeniseBracketExpre after
+            Right (BClass content : otherToken, rest)
+        tokeniseBracketExpre ('[':'=':rs) = do
+            (content, after) <- maybeToEither "Error `=]`" (takeUntil "=]" rs)
+            (otherToken, rest) <- tokeniseBracketExpre after
+            if length content == 1 
+                then Right (BEquiv (head content) : otherToken, rest)
+                else Left "Content is to long inside [= =]"
+            
+        tokeniseBracketExpre ('\\' : c : rs ) = do
+            (otherToken, rest) <- tokeniseBracketExpre rs
+            Right (BChar c : otherToken, rest)
+        tokeniseBracketExpre (c : rs) = do
+            (otherToken, rest) <- tokeniseBracketExpre rs
+            Right (BChar c : otherToken, rest)
+
 regexParse :: Parser String [TokenRegex]
 regexParse = many tokeniseChar
+
+maybeToEither :: e -> Maybe a -> Either e a 
+maybeToEither err = maybe (Left err) Right

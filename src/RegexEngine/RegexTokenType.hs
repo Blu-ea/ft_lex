@@ -1,11 +1,19 @@
 module RegexEngine.RegexTokenType where 
 
+data BracketToken
+    = BChar Char
+    | BRange Char Char
+    | BClass String     -- [:ClassName:]
+    | BEquiv Char       -- [=Char=]
+    | BCollating String -- [.String.]
+    deriving Show
+
 
 data TokenRegex 
     = TChar Char
     | TAny -- . -> Cannot be Null or Newline (0, 10)
     | TOr
-    | TBracket String
+    | TBracket Bool [BracketToken]
     | TQuoting String
     | TGroup [TokenRegex]
     | TRepetionMany  -- * -> (0, inf) (Take as much as possible)
