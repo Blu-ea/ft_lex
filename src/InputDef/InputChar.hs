@@ -13,8 +13,12 @@ instance Show FilePos where
 instance Show InputChar where
     show (InputChar val (pos, path)) = [val]
 
-getPose :: (Int, Int) -> String
-getPose (a, b) = show a ++ ':' : show b
+getPoseString :: (Int, Int) -> String
+getPoseString (a, b) = show a ++ ':' : show b
+
+toString :: [InputChar] -> String
+toString [] = []
+toString ((InputChar x _): xs) = x : toString xs
 
 type InputString = [InputChar]
 

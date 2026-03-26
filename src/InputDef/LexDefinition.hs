@@ -1,10 +1,12 @@
 module InputDef.LexDefinition where 
+import InputDef.InputChar ( InputChar )
 
 -- Atoms
-type Regex     = String
-type Action    = String
-type CodeBlock = String
-type MacroName = String
+type Regex      = [InputChar]
+type Action     = String
+type CodeBlock  = String
+type MacroName  = String
+type MRegex     = String
 
 -- Whole file
 data LexFile = LexFile
@@ -16,8 +18,8 @@ data LexFile = LexFile
 instance Show LexFile where
     show (LexFile d r u) = 
         "Def   -- \n" ++ unlines (map (("\t" ++). show) d) ++ "\n" ++
-        "Rules -- \n" ++ unlines (map (("\t" ++). show) r) ++ "\n"  
-        ++ "SubRo -- \n" ++ u ++ "\n -- -- --"
+        "Rules -- \n" ++ unlines (map (("\t" ++). show) r) ++ "\n" ++
+        "SubRo -- \n" ++ u ++ "\n -- -- --"
 
 
 printList :: Show a => [a] -> IO()
@@ -27,7 +29,7 @@ printList (x:xs) = do
 printList [] = return ()
 
 data Definition
-    = Macro MacroName Regex
+    = Macro MacroName MRegex
     | DCode CodeBlock
     | Array
     | Pointer

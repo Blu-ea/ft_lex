@@ -1,30 +1,38 @@
 module RegexEngine.StringToRegex where
 
-import InputDef.LexDefinition ( Definition, getDefinition)
-import Parser
-import RegexEngine.RegexTokenType
-
-import GHC.Unicode
-import Control.Applicative (Alternative(many))
-import Debug.Trace
+import Control.Applicative (Alternative(some))
 import Numeric (readHex)
 import Data.Char
+    ( digitToInt,
+      chr,
+      isAlpha,
+      isAlphaNum,
+      isDigit,
+      isHexDigit,
+      isOctDigit )
 import Data.List (isPrefixOf)
+
+import InputDef.LexDefinition ( Definition, getDefinition)
+import Parser ( Parser(..) )
+import RegexEngine.RegexTokenType
+    ( BracketToken(BChar, BCollating, BClass, BEquiv), TokenRegex(..) )
 
 
 -- The regex need to be translated before hand so it can be processe token wise.
-translateRegex :: String -> [Definition] -> Maybe String
-translateRegex [] _ = Just []
-translateRegex ('{':rs) env =
+translateRegex :: String -> (Int, FilePath) -> [Definition] -> Either String (String, (Int,FilePath))
+translateRegex [] pos _ = Right ([], pos)
+translateRegex ('{':rs) pos@(x, file) env =
     let (word, rss) = search rs in  
 
     if not (null word) && isAlpha (head word) && all isAlphaNum (tail word) then do
-        translated <- getDefinition word env
-        restTranslated <-  translateRegex rss env
-        return $ '(' : translated ++ ')' : restTranslated
+        let translation = getDefinition word env
+        (restTranslated, _) <-  translateRegex rss pos env
+        case translation of 
+            Nothing -> Left (file ++ ':' : show x ++ ": Definition {" ++ word ++ "} is undefined.")
+            Just translated -> return ('(' : translated ++ ')' : restTranslated, pos)
     else do
-        restTranslated <- translateRegex rs env
-        return $ '{' : restTranslated
+        (restTranslated, _) <- translateRegex rs pos env
+        return ('{' : restTranslated, pos)
 
         where
             search [] = ([],[])
@@ -34,13 +42,13 @@ translateRegex ('{':rs) env =
                     let (word ,rss) = search sxx
                     in (ssx: word, rss)
 
-translateRegex ('\\': r: rs) env = do
-    restTranslated <- translateRegex rs env
-    return $ r : restTranslated
-translateRegex ('"': rs) env =
+translateRegex ('\\': r: rs) pos env = do
+    (restTranslated, _) <- translateRegex rs pos env
+    return (r : restTranslated, pos)
+translateRegex ('"': rs) pos env =
     let (insideQuote, afterQuote) = inQuote rs in do
-    restTranslated <- translateRegex afterQuote env
-    return $ '"' : insideQuote ++ '"' : restTranslated
+    (restTranslated, _) <- translateRegex afterQuote pos env
+    return ('"' : insideQuote ++ '"' : restTranslated, pos)
     where
         inQuote [] = ([], [])
         inQuote ('"' : iQrs) = ([], iQrs)
@@ -48,13 +56,15 @@ translateRegex ('"': rs) env =
             let (inside, after) = inQuote iQrs in 
                 (c : inside, after)
 
-translateRegex ['['] _ = Nothing
-translateRegex ('[':trs) env = do
+-- translateRegex ['['] _ _ = trace " Here ? 1" Nothing
+translateRegex ('[':trs) pos env = do
     (inside, after) <- parseBracket trs
-    rest <- translateRegex after env
-    return $ '[' : inside ++ ']' : rest
+    (rest, _)<- translateRegex after pos env
+    return ('[' : inside ++ ']' : rest, pos)
 
-translateRegex (r:rs) env = (r :) <$> translateRegex rs env 
+translateRegex (r:rs) pos env = do
+    (rest, _) <- translateRegex rs pos env 
+    return (r : rest, pos)
 
 takeWhileN :: Int -> (a -> Bool) -> [a] -> ([a], [a])
 takeWhileN 0 _ xs = ([], xs)
@@ -64,8 +74,8 @@ takeWhileN n f s@(c: xs)
         | otherwise = ([], s)
 takeWhileN _ _ [] = ([], [])
 
-parseBracket :: String -> Maybe (String, String)
-parseBracket [] = Nothing
+parseBracket :: String -> Either String (String, String)
+parseBracket [] = Left "Bracket Expression not closed"
 parseBracket s =
     let (start, rest) = case s of
                 ('^':xs) -> ("^", xs)
@@ -77,18 +87,23 @@ parseBracket s =
         scanFirst (']':xs) = scan xs "]"
         scanFirst xs       = scan xs ""
 
-        scan [] _ = Nothing
-        scan (']':xs) acc = Just (acc, xs)
+        scan [] _ = Left "Bracket Expression not Closed"
+        scan (']':xs) acc = Right (acc, xs)
 
-        scan ('[':'.':xs) acc = do
-            (content, rest) <- takeUntil ".]" xs
-            scan rest (acc ++ "[." ++ content ++ ".]")
-        scan ('[':'=':xs) acc = do
-            (content, rest) <- takeUntil "=]" xs
-            scan rest (acc ++ "[=" ++ content ++ "=]")
-        scan ('[':':':xs) acc = do
-            (content, rest) <- takeUntil ":]" xs
-            scan rest (acc ++ "[:" ++ content ++ ":]")
+        scan ('[':'.':xs) acc =
+            case takeUntil ".]" xs of 
+                Nothing -> Left "Bracket Expression [. not closed"
+                Just (content, rest) -> scan rest (acc ++ "[." ++ content ++ ".]")
+        scan ('[':'=':xs) acc =
+            case takeUntil "=]" xs of 
+                Nothing -> Left "Bracket Expression [= not closed"
+                Just (content, rest) -> scan rest (acc ++ "[=" ++ content ++ "=]")
+
+        scan ('[':':':xs) acc =
+            case takeUntil ":]" xs of 
+                Nothing -> Left "Bracket Expression [: not closed"
+                Just (content, rest) -> scan rest (acc ++ "[:" ++ content ++ ":]")
+
 
         scan ('\\': c :xs) acc = scan xs (acc ++ ['\\', c])
         scan (c:xs) acc = scan xs (acc ++ [c])
@@ -136,19 +151,19 @@ tokeniseChar = Parser charP
             Right (TQuoting content, rest)
 
         charP ('[' : rs) = do
-            (inside, outside) <- getBracketContent rs
+            (inside, outside) <- parseBracket rs
             let inverted = "^" `isPrefixOf` inside
-            (content, rest) <- tokeniseBracketExpreFirst (if inverted then tail inside else inside)
-            if not $ null rest 
+            (content, rest) <- tokeniseBracketExpreFirst (if inverted then tail inside else inside) :: Either String ([BracketToken], String)
+            if not $ null rest
                 then Left "Ill Formed Bracket Expression"
                 else Right (TBracket inverted content , outside) 
         charP ('*' : xs) = Right (TRepetionMany, xs)
         charP ('+' : xs) = Right (TRepetionSome, xs)
         charP ('?' : xs) = Right (TRepetionMaybe, xs)
-        charP ('{' : xs) = case trace (show $ span (/= '}') xs) (span (/= '}')) xs of
-                ([], _) -> trace "empty" Left "Empty {}"
-                (inside, '}' : rest) -> trace "found" inCurly (span (/= ',') inside) rest
-                _ -> trace "closed" Left "Not closed {}"
+        charP ('{' : xs) = case span (/= '}') xs of
+                ([], _) -> Left "Empty {}"
+                (inside, '}' : rest) -> inCurly (span (/= ',') inside) rest
+                _ -> Left "Not closed {}"
 
         charP ('|' : xs) = Right (TOr, xs)
 
@@ -177,13 +192,9 @@ tokeniseChar = Parser charP
         inCurly (n1, ',': n2)   rest | isDigits n1, isDigits n2 = Right (TRepetionCustom (read n1) (read n2), rest)
         inCurly (n1, [','])     rest | isDigits n1              = Right (TRepetionCustom (read n1) (-1), rest)
         inCurly (n1, [])        rest | isDigits n1              = Right (TRepetionCustom (read n1) (read n1), rest)
-        inCurly a               b                               = trace (('a' : show a )++ ' ' : 'b' : b)  Left "Ill formed {}"
+        inCurly a               b                               = Left "Ill formed {}"
 
         isDigits s = not (null s) && all isDigit s
-
-        getBracketContent rs = case parseBracket rs of
-            Nothing -> Left "Bracket expression Not Closed"
-            Just x -> Right x
 
         tokeniseBracketExpreFirst (']' :rs) = do
             (otherToken, rest) <- tokeniseBracketExpre rs
@@ -205,8 +216,8 @@ tokeniseChar = Parser charP
             if length content == 1 
                 then Right (BEquiv (head content) : otherToken, rest)
                 else Left "Content is to long inside [= =]"
-            
-        tokeniseBracketExpre ('\\' : c : rs ) = do
+
+        tokeniseBracketExpre ('\\' : c : rs) = do
             (otherToken, rest) <- tokeniseBracketExpre rs
             Right (BChar c : otherToken, rest)
         tokeniseBracketExpre (c : rs) = do
@@ -214,7 +225,7 @@ tokeniseChar = Parser charP
             Right (BChar c : otherToken, rest)
 
 regexParse :: Parser String [TokenRegex]
-regexParse = many tokeniseChar
+regexParse = some tokeniseChar
 
 maybeToEither :: e -> Maybe a -> Either e a 
 maybeToEither err = maybe (Left err) Right

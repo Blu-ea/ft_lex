@@ -1,16 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
 module InputDef.InputParse where
 
-import Control.Applicative
-
-import InputDef.InputChar ( InputString, InputChar(InputChar), getPose )
-import InputDef.LexDefinition ( Rule(..), Definition(..), LexFile(LexFile) )
-import Parser ( Parser (Parser) )
-
 import Data.Functor (($>), void)
 import Data.Char ( isAlphaNum, isAlpha )
 import System.IO (IOMode (ReadMode), withBinaryFile)
-import GHC.IO.Handle
+import GHC.IO.Handle ( hGetContents' )
+import Control.Applicative ( Alternative(many, (<|>), some) )
+
+import InputDef.InputChar ( InputString, InputChar(InputChar, position), getPoseString )
+import InputDef.LexDefinition ( Rule(..), Definition(..), LexFile(LexFile) )
+import Parser ( Parser (Parser) )
 
 
 getInput :: [FilePath] -> IO InputString
@@ -27,6 +26,9 @@ annotate ln cn f (c:cs) =
                                                         (if c == '\n' then 0 else cn + 1)
                                                         f cs
 
+-- getPose :: Parser [InputChar] Int
+-- getPose = Parser.
+
 -- Parser i a
 --  is equivalent to
 -- i -> Either String (a, i)
@@ -36,14 +38,21 @@ consumeChar c = Parser charP
     where
         charP [] = Left $ "Expected `" ++ [c] ++ "`, but found end of file"
         charP ((InputChar x (pose, file)): xs)  | x == c    = Right (c,xs)
-                                                | otherwise = Left ("Error: " ++ file ++ ':' : getPose pose ++ ": Unexpected char `"++ show x ++"`")
+                                                | otherwise = Left ("Error: " ++ file ++ ':' : getPoseString pose ++ ": Unexpected char `"++ show x ++"`")
+
+consumeCharPos :: Char -> Parser [InputChar] InputChar
+consumeCharPos c = Parser charP
+    where
+        charP [] = Left $ "Expected `" ++ [c] ++ "`, but found end of file"
+        charP (xc@(InputChar x (pose, file)): xs)  | x == c    = Right (xc,xs)
+                                                | otherwise = Left ("Error: " ++ file ++ ':' : getPoseString pose ++ ": Unexpected char `"++ show x ++"`")
 
 consumeCharFromString :: String -> Parser [InputChar] Char
 consumeCharFromString s = Parser charP
     where
         charP [] = Left $ "Expected any from`" ++ s ++ "`, but found end of file"
         charP ((InputChar x (pose, file)): xs) | x `elem` s = Right (x, xs)
-                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPoseString pose ++ ": Unexpected char `"++ show x ++"`")
 
 consumeAnyChar :: Parser [InputChar] Char
 consumeAnyChar = Parser $ \case
@@ -55,14 +64,30 @@ consumeNotChar c = Parser charP
     where
         charP [] = Left "End of file"
         charP ((InputChar x (pose, file)): xs) | x /= c    = Right (x, xs)
-                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPoseString pose ++ ": Unexpected char `"++ show x ++"`")
+
+consumeNotCharPos :: Char -> Parser [InputChar] InputChar
+consumeNotCharPos c = Parser charP
+    where
+        charP [] = Left "End of file"
+        charP (xc@(InputChar x (pose, file)): xs) | x /= c    = Right (xc, xs)
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPoseString pose ++ ": Unexpected char `"++ show x ++"`")
+
 
 consumeNotCharFromString :: String -> Parser [InputChar] Char
 consumeNotCharFromString s = Parser charP
     where
         charP [] = Left "End of File"
         charP ((InputChar x (pose, file)): xs) | x `notElem` s = Right (x, xs)
-                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPose pose ++ ": Unexpected char `"++ show x ++"`")
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPoseString pose ++ ": Unexpected char `"++ show x ++"`")
+
+consumeNotCharFromStringPos :: String -> Parser [InputChar] InputChar
+consumeNotCharFromStringPos s = Parser charP
+    where
+        charP [] = Left "End of File"
+        charP (c@(InputChar x (pose, file)): xs) | x `notElem` s = Right (c, xs)
+                                    | otherwise = Left ("Error: " ++ file ++ ":" ++ getPoseString pose ++ ": Unexpected char `"++ show x ++"`")
+
 
 
 consumeString :: String -> Parser [InputChar] String
@@ -70,6 +95,10 @@ consumeString = mapM consumeChar
 
 consumeUntil :: Char -> Parser [InputChar] String
 consumeUntil c = some (consumeNotChar c)
+
+consumeUntilPos :: Char -> Parser [InputChar] [InputChar]
+consumeUntilPos c = some (consumeNotCharPos c)
+
 
 consumeUntilS :: String -> Parser [InputChar] String
 consumeUntilS end = go
@@ -137,6 +166,14 @@ consumeDQuotes = do
     close <- consumeChar '"'
     return (open : inner ++ [close])
 
+consumeDQuotesPos:: Parser [InputChar] [InputChar]
+consumeDQuotesPos = do
+    open <- consumeCharPos '"'
+    inner <- consumeUntilPos '"'
+    close <- consumeCharPos '"'
+    return (open : inner ++ [close])
+
+
 
 defParse :: Parser [InputChar] [Definition]
 defParse =
@@ -168,9 +205,15 @@ ruleParse =
     where
         rCode = RCode <$> (space *> (ss *> consumeUntil '\n' <* eol))
             <|> RCode <$> (consumeString "%{\n" *> consumeUntilS "\n%}\n" <* consumeString "\n%}\n")
-        rRule = RRule <$> (checkIfNotCharThenConsume " %" (concat <$> some (some (consumeNotCharFromString " \"") <|> consumeDQuotes)) <* ss)
+        rRule = RRule <$> (checkIfNotCharThenConsume " %" (concat <$> some (some (consumeNotCharFromStringPos " \"\n") <|> consumeDQuotesPos)) <* ss)
                         <*> (concat <$> some (some (consumeNotCharFromString "\n{}") <|> consumeBrackets)) <* eol
 
+
+getPos :: Parser [InputChar] ((Int, Int), FilePath)
+getPos = Parser $ \input ->
+    case input of
+        (c:_) -> Right (position c, input)
+        []    -> Left "No input"
 
 lexParse :: Parser [InputChar] LexFile
 lexParse =
