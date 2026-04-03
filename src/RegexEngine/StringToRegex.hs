@@ -157,11 +157,11 @@ tokeniseChar = Parser charP
 
         charP ('[' : rs) = do
             (inside, outside) <- parseBracket rs
-            let inverted = "^" `isPrefixOf` inside
-            (content, rest) <- tokeniseBracketExpreFirst (if inverted then tail inside else inside) :: Either String ([BracketToken], String)
+            let isInverted = "^" `isPrefixOf` inside
+            (content, rest) <- tokeniseBracketExpreFirst (if isInverted then tail inside else inside) :: Either String ([BracketToken], String)
             if not $ null rest
                 then Left "Ill Formed Bracket Expression"
-                else Right (TBracket inverted content , outside) 
+                else Right (TBracket (not isInverted) content , outside) 
         charP ('*' : xs) = Right (TRepetionMany, xs)
         charP ('+' : xs) = Right (TRepetionSome, xs)
         charP ('?' : xs) = Right (TRepetionMaybe, xs)
@@ -243,8 +243,8 @@ startAnchor = Parser (\
 
 regexParse :: Parser String [TokenRegex]
 regexParse = (++)
-                    <$> (fromMaybe [] <$> optional startAnchor)
-                    <*> some tokeniseChar
+                <$> (fromMaybe [] <$> optional startAnchor)
+                <*> some tokeniseChar
 
 maybeToEither :: e -> Maybe a -> Either e a 
 maybeToEither err = maybe (Left err) Right

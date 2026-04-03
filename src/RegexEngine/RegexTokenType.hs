@@ -8,12 +8,13 @@ data BracketToken
     | BCollating String -- [.String.]
     deriving Show
 
+type IsMatch = Bool
 
 data TokenRegex 
     = TChar Char
     | TAny -- . -> Cannot be Null or Newline (0, 10)
     | TOr
-    | TBracket Bool [BracketToken]
+    | TBracket IsMatch [BracketToken]
     | TQuoting String
     | TGroup [TokenRegex]
     | TRepetionMany  -- * -> (0, inf) (Take as much as possible)
