@@ -1,6 +1,6 @@
 module RegexEngine.StringToRegex where
 
-import Control.Applicative (Alternative(some))
+import Control.Applicative (Alternative(some), optional)
 import Numeric (readHex)
 import Data.Char
     ( digitToInt,
@@ -11,6 +11,7 @@ import Data.Char
       isHexDigit,
       isOctDigit )
 import Data.List (isPrefixOf)
+import Data.Maybe (fromMaybe)
 
 import InputDef.LexDefinition ( Definition, getDefinition)
 import Parser ( Parser(..) )
@@ -125,9 +126,6 @@ tokeniseChar = Parser charP
 
         charP ('.' : xs) = Right (TAny, xs)
 
-        charP ('^' : xs) = Right (TStart, xs)
-        charP ('$' : xs) = Right (TStart, xs)
-
         charP ('\\' : '\\' : xs) = Right (TChar '\\', xs)
         charP ('\\' : 'a' : xs) = Right (TChar '\a', xs)
         charP ('\\' : 'b' : xs) = Right (TChar '\b', xs)
@@ -235,8 +233,24 @@ tokeniseChar = Parser charP
             (otherToken, rest) <- tokeniseBracketExpre rs
             Right (BChar c : otherToken, rest)
 
+startAnchor :: Parser String [TokenRegex]
+startAnchor = Parser (\ 
+    input -> case input of
+        ('^' : rs)-> Right([TStart], rs)
+        _ -> Left "" )
+
+endAnchor :: Parser String [TokenRegex]
+endAnchor = Parser (\ 
+    input -> case input of
+        ('$' : [])-> Right([TEnd], [])
+        _ -> Left "" )
+
+
 regexParse :: Parser String [TokenRegex]
-regexParse = some tokeniseChar
+regexParse = (\start middle end -> start ++ middle ++ end)
+                    <$> (fromMaybe [] <$> optional startAnchor)
+                    <*> some tokeniseChar
+                    <*> (fromMaybe [] <$> optional endAnchor)
 
 maybeToEither :: e -> Maybe a -> Either e a 
 maybeToEither err = maybe (Left err) Right
