@@ -15,7 +15,7 @@ import Data.List (isPrefixOf)
 import InputDef.LexDefinition ( Definition, getDefinition)
 import Parser ( Parser(..) )
 import RegexEngine.RegexTokenType
-    ( BracketToken(BChar, BCollating, BClass, BEquiv), TokenRegex(..) )
+    ( BracketToken(BChar, BCollating, BClass, BEquiv, BRange), TokenRegex(..) )
 
 
 -- The regex need to be translated before hand so it can be processe token wise.
@@ -122,7 +122,12 @@ tokeniseChar :: Parser String TokenRegex
 tokeniseChar = Parser charP
     where
         charP [] = Left "Empty Regex"
+
         charP ('.' : xs) = Right (TAny, xs)
+
+        charP ('^' : xs) = Right (TStart, xs)
+        charP ('$' : xs) = Right (TStart, xs)
+
         charP ('\\' : '\\' : xs) = Right (TChar '\\', xs)
         charP ('\\' : 'a' : xs) = Right (TChar '\a', xs)
         charP ('\\' : 'b' : xs) = Right (TChar '\b', xs)
@@ -141,11 +146,12 @@ tokeniseChar = Parser charP
         charP ('\\' : n1: n2: xs) | isOctDigit n1 && isOctDigit n2 = Right (TChar (chr (digitToInt n1 * 8 + digitToInt n2)), xs)
         charP ('\\' : n1: xs) | isOctDigit n1 = Right (TChar (chr . digitToInt $ n1), xs)
         charP ('\\' : x : xs) = Right (TChar x, xs)
+
         charP ('(' : xs) = do
             (tokenList, rest) <- inParenthesis xs
             Right (TGroup tokenList, rest)
         charP (')' : _) = Left "Parenthesis not opened"
-        
+
         charP ('"' : xs) = do  -- Need to convert that in a list of char (can be \ (same as above))
             (content, rest) <- inQuote xs
             Right (TQuoting content, rest)
@@ -192,7 +198,7 @@ tokeniseChar = Parser charP
         inCurly (n1, ',': n2)   rest | isDigits n1, isDigits n2 = Right (TRepetionCustom (read n1) (read n2), rest)
         inCurly (n1, [','])     rest | isDigits n1              = Right (TRepetionCustom (read n1) (-1), rest)
         inCurly (n1, [])        rest | isDigits n1              = Right (TRepetionCustom (read n1) (read n1), rest)
-        inCurly a               b                               = Left "Ill formed {}"
+        inCurly _               _                               = Left "Ill formed {}"
 
         isDigits s = not (null s) && all isDigit s
 
@@ -202,6 +208,11 @@ tokeniseChar = Parser charP
         tokeniseBracketExpreFirst s = tokeniseBracketExpre s
 
         tokeniseBracketExpre [] = Right ([], "")
+        tokeniseBracketExpre (c1:'-':c2:rs) =
+            if c1 > c2 then Left "Error on Range"
+            else do
+                (otherToken, rest) <- tokeniseBracketExpre rs
+                Right (BRange c1 c2 : otherToken, rest)
         tokeniseBracketExpre ('[':'.':rs) = do
             (content, after) <- maybeToEither "Error `.]`" (takeUntil ".]" rs)
             (otherToken, rest) <- tokeniseBracketExpre after

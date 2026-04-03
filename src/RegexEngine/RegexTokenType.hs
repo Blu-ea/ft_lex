@@ -2,7 +2,7 @@ module RegexEngine.RegexTokenType where
 
 data BracketToken
     = BChar Char
-    | BRange Char Char
+    | BRange Char Char  -- [Char-Char]
     | BClass String     -- [:ClassName:]
     | BEquiv Char       -- [=Char=]
     | BCollating String -- [.String.]
@@ -20,5 +20,7 @@ data TokenRegex
     | TRepetionSome  -- + -> (1, inf) (Take as Much as possible)
     | TRepetionMaybe -- ? -> (0, 1) (Take as much as Possible)
     | TRepetionCustom Int Int -- {n,m} (Take between n and m)
+    | TStart    -- ^ define the start of the String
+    | TEnd      -- $ define the end of the String
     deriving Show
 
