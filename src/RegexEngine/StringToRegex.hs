@@ -125,6 +125,7 @@ tokeniseChar = Parser charP
         charP [] = Left "Empty Regex"
 
         charP ('.' : xs) = Right (TAny, xs)
+        charP ['$'] = Right (TEnd, [])
 
         charP ('\\' : '\\' : xs) = Right (TChar '\\', xs)
         charP ('\\' : 'a' : xs) = Right (TChar '\a', xs)
@@ -239,18 +240,11 @@ startAnchor = Parser (\
         ('^' : rs)-> Right([TStart], rs)
         _ -> Left "" )
 
-endAnchor :: Parser String [TokenRegex]
-endAnchor = Parser (\ 
-    input -> case input of
-        ('$' : [])-> Right([TEnd], [])
-        _ -> Left "" )
-
 
 regexParse :: Parser String [TokenRegex]
-regexParse = (\start middle end -> start ++ middle ++ end)
+regexParse = (++)
                     <$> (fromMaybe [] <$> optional startAnchor)
                     <*> some tokeniseChar
-                    <*> (fromMaybe [] <$> optional endAnchor)
 
 maybeToEither :: e -> Maybe a -> Either e a 
 maybeToEither err = maybe (Left err) Right
