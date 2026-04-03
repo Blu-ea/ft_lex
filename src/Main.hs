@@ -13,6 +13,7 @@ import InputDef.InputParse ( getInput, lexParse )
 import InputDef.LexDefinition ( LexFile(LexFile), Rule(RRule) )
 import RegexEngine.StringToRegex ( translateRegex, regexParse )
 import InputDef.InputChar ( toString, InputChar (InputChar) )
+import Error (formatErr)
 
 
 main :: IO ()
@@ -31,23 +32,27 @@ runProgram _ input = do
     case a of
         Left a' -> putStr a'
         Right (LexFile defs rules usr, _) -> do
-            let ruleList =
-                    map (\s ->
-                        case runParser regexParse (fst s) of  
-                            Left err -> Left $ (snd . snd $ s) ++ ':' : show (fst . snd $ s) ++ ": " ++ err
-                            Right (reg, []) -> Right (reg, snd s)
-                            Right (_, _) -> Left $ (snd . snd $ s) ++ ':' : show (fst . snd $ s) ++ ": Unvalide Regex Expression")
-                    $ mapMaybe (\r ->
-                        case translateRegex (getString r) (getPos r) defs of
-                            Left err -> trace (snd (getPos r) ++ ':' : show (fst (getPos r)) ++ ": " ++ err ) Nothing
-                            Right res -> Just res)
-                    (filter isRRule rules)
+            let ruleList =    map parseRules
+                            . mapMaybe (translateRule defs)
+                            . filter isRRule
+                            $ rules
             when (not (null $ lefts ruleList) || length ruleList /= length rules ) $ mapM_ putStrLn (lefts ruleList) >> exitFailure
             putStrLn "PASS"
     return ()
 
+
+
     where
         isRRule (RRule {})= True
         isRRule _ = False
+        parseRules s =
+            case runParser regexParse (fst s) of  
+                Left err -> Left $ formatErr (snd s) err
+                Right (reg, []) -> Right (reg, snd s)
+                Right (_, _) -> Left $ formatErr (snd s) "Unvalide Regex Expression"
+        translateRule defs r =
+            case translateRegex (getString r) (getPos r) defs of
+                Left err -> trace (formatErr (getPos r) err ) Nothing
+                Right res -> Just res
         getPos (RRule ((InputChar _ ((x, _), file)):_) _) = (x, file)
         getString (RRule r _) = toString r
