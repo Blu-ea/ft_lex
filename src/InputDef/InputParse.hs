@@ -1,9 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
 module InputDef.InputParse where
 
-import Data.Functor (($>), void)
+import Data.Functor ( ($>), void )
 import Data.Char ( isAlphaNum, isAlpha )
-import System.IO (IOMode (ReadMode), withBinaryFile)
+import System.IO ( IOMode (ReadMode), withBinaryFile, hSetBinaryMode, stdin )
 import GHC.IO.Handle ( hGetContents' )
 import Control.Applicative ( Alternative(many, (<|>), some) )
 
@@ -13,7 +13,9 @@ import Parser ( Parser (Parser) )
 
 
 getInput :: [FilePath] -> IO InputString
-getInput [] = return []
+getInput [] = do 
+    hSetBinaryMode stdin True
+    annotate 1 1 "stdin" <$> getContents
 getInput paths = concat <$> mapM readFileWithLines paths
     where
         readFileWithLines path =
