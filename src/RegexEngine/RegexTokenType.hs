@@ -1,5 +1,8 @@
 module RegexEngine.RegexTokenType where 
 
+type IsMatch = Bool
+
+
 data BracketToken
     = BChar Char
     | BRange Char Char  -- [Char-Char]
@@ -7,8 +10,6 @@ data BracketToken
     | BEquiv Char       -- [=Char=]
     | BCollating String -- [.String.]
     deriving Show
-
-type IsMatch = Bool
 
 data TokenRegex 
     = TChar Char
@@ -25,3 +26,20 @@ data TokenRegex
     | TEnd      -- $ define the end of the String
     deriving Show
 
+
+
+    -- Syntax Tree Regex
+data SyntaxTreeRegex 
+    = STConcat SyntaxTreeRegex SyntaxTreeRegex
+    | STExpr Char
+    | STAny
+    | STOr SyntaxTreeRegex SyntaxTreeRegex
+    | STBracket IsMatch [Char]
+    | STQuote String
+    | STGroup SyntaxTreeRegex
+    | STRepetionMany SyntaxTreeRegex
+    | STRepetionSome SyntaxTreeRegex
+    | STRepetionMaybe SyntaxTreeRegex
+    | STRepetionCustom Int Int SyntaxTreeRegex
+    | STStart
+    | STEnd

@@ -10,8 +10,8 @@ import Data.Either (lefts)
 import Parser ( Parser(runParser) )
 import ProgOption ( Options(Options), processOpts, printUsage )
 import InputDef.InputParse ( getInput, lexParse )
-import InputDef.LexDefinition ( LexFile(LexFile), Rule(RRule) )
-import RegexEngine.StringToRegex ( translateRegex, regexParse )
+import InputDef.LexDefinition ( LexFile(LexFile), Rule(RRule), printList )
+import RegexEngine.RegexLexing ( translateRegex, regexParse )
 import InputDef.InputChar ( toString, InputChar (InputChar) )
 import Error (formatErr)
 
@@ -38,6 +38,7 @@ runProgram _ input = do
                             $ rules
             when (not (null $ lefts ruleList) || length ruleList /= length rules ) $ mapM_ putStrLn (lefts ruleList) >> exitFailure
             putStrLn "PASS"
+            printList ruleList
     return ()
 
 

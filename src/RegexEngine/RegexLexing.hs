@@ -1,4 +1,6 @@
-module RegexEngine.StringToRegex where
+{- HLINT ignore "Use lambda-case" -}
+{- HLINT ignore "Functor law" -}
+module RegexEngine.RegexLexing where
 
 import Control.Applicative (Alternative(some), optional)
 import Numeric (readHex)
