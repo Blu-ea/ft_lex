@@ -107,8 +107,6 @@ parseBracket s =
                 Nothing -> Left "Bracket Expression [: not closed"
                 Just (content, rest) -> scan rest (acc ++ "[:" ++ content ++ ":]")
 
-
-        scan ('\\': c :xs) acc = scan xs (acc ++ ['\\', c])
         scan (c:xs) acc = scan xs (acc ++ [c])
 
 takeUntil :: String -> String -> Maybe (String, String)
@@ -229,9 +227,6 @@ tokeniseChar = Parser charP
                 then Right (BEquiv (head content) : otherToken, rest)
                 else Left "Content is to long inside [= =]"
 
-        tokeniseBracketExpre ('\\' : c : rs) = do
-            (otherToken, rest) <- tokeniseBracketExpre rs
-            Right (BChar c : otherToken, rest)
         tokeniseBracketExpre (c : rs) = do
             (otherToken, rest) <- tokeniseBracketExpre rs
             Right (BChar c : otherToken, rest)
