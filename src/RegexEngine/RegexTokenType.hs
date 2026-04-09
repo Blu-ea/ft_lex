@@ -9,7 +9,7 @@ data BracketToken
     | BClass String     -- [:ClassName:]
     | BEquiv Char       -- [=Char=]
     | BCollating String -- [.String.]
-    deriving Show
+    deriving (Show, Eq)
 
 data TokenRegex 
     = TChar Char
@@ -24,7 +24,7 @@ data TokenRegex
     | TRepetionCustom Int Int -- {n,m} (Take between n and m)
     | TStart    -- ^ define the start of the String
     | TEnd      -- $ define the end of the String
-    deriving Show
+    deriving (Show, Eq)
 
 
 
@@ -43,3 +43,5 @@ data SyntaxTreeRegex
     | STRepetionCustom Int Int SyntaxTreeRegex
     | STStart
     | STEnd
+    |   STVoid -- Used to void Value, should not be in the return result
+    deriving Show
