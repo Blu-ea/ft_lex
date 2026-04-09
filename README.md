@@ -115,9 +115,46 @@ The lex utility shall support the set of extended regular expressions (see XBD 9
 \<state>\<state1,state2,...>r  
     : The regular expression `r` shall be matched **ONLY** when the program is in the indicated state.
 
+Below, a simplified BNF of a rule
+
+```bnf
+<expr>  ::= <term> ( "|" <term> )* 
+
+<term>  ::= <factor>+
+
+<factor> ::= <base> <quantifier>?
+
+<quantifier> ::= "*" | "+" | "?" | "{" [0-9]* ("," ([0-9])?)? "}"
+
+<base>    ::= <Anychar> | <quoting> | <group>
+<quoting> ::= "\"" <Anychar> "\""
+<group>   ::= "(" <expr> ")"
+```
+
+### Order of Precedence in lex
+
+|       Extended Regular Expression | Precedence              |
+| --------------------------------: | :---------------------- |
+| collation-related bracket symbols | `[= =]` `[: :]` `[. .]` |
+|                escaped characters | `\<special character>`  |
+|                bracket expression | `[ ]`                   |
+|                           quoting | `"..."`                 |
+|                          grouping | `()`                    |
+|                        definition | `{name}`                |
+|   single-character RE duplication | `* + ?`                 |
+|                     concatenation | ` `                     |
+|               interval expression | `{m,n}`                 |
+|                       alternation | `\|`                    |
+
+<small>
+    Precedence from hight to low.
+</small>
+
 ---
 
 ## Other
 
-The Longest matches prevaile, (If `BCD` and `BC` are possible matches, only `BCD` will be used because of it's lenght)
-If multiple rules matches, The 1st one defined is used
+The Longest matches prevaile, (If `BCD` and `BC` are possible matches, only `BCD` will be used because of it's lenght).  
+This paterne can be easily achived with the DFA, where as long as the next step is not q0, we continue matching. When going back to q0, we look at what was our previous terminal match, then use that.
+
+If multiple rules matches, the 1st one defined is used
