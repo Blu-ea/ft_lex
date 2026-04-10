@@ -12,9 +12,13 @@ parserAtom = Parser tokenize
     where
         tokenize ((TChar c):x) = Right (STExpr c, x)
         tokenize (TAny:x) = Right (STAny, x)
-        tokenize ((TQuoting s):x) = Right ((STQuote s), x)
+        tokenize ((TQuoting s):x) = Right (STQuote s, x)
         tokenize ((TBracket b brTokens):x) = Right ((STBracket b "TODO"), x) -- TODO: bracket Expression
-        tokenize ((TGroup content):x) = Right ((STGroup STAny), x) -- TODO
+        tokenize ((TGroup content):x) = do
+            treeContent <- runParser parserOr content
+            case treeContent of
+                (tC, []) -> Right (STGroup tC, x)
+                (_, _) -> Left "Unvalid Expresion"
         tokenize (TStart:x) = Right (STStart, x)
         tokenize (TEnd:x) = Right (STEnd, x)
 
