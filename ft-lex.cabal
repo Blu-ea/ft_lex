@@ -64,7 +64,8 @@ executable ft-lex
                         InputDef.InputChar
                         InputDef.InputParse
                         InputDef.LexDefinition
-                        RegexEngine.StringToRegex
+                        RegexEngine.RegexLexing
+                        RegexEngine.RegexParser
                         RegexEngine.RegexTokenType
 
     -- LANGUAGE extensions used by modules in this package.

@@ -4,10 +4,7 @@ module RegexEngine.RegexParser where
 import RegexEngine.RegexTokenType (TokenRegex (..), SyntaxTreeRegex (..))
 import Parser ( Parser (Parser, runParser) )
 import Control.Applicative ((<|>))
-import Debug.Trace (trace)
 import Control.Monad (void)
-import Data.Foldable (Foldable(fold))
-
 
 
 parserAtom :: Parser [TokenRegex] SyntaxTreeRegex
@@ -62,3 +59,10 @@ parserOr = do
             consumeOr = Parser $ \case
                 (TOr: rs)   -> Right (STVoid, rs)
                 _           -> Left ""
+
+
+regexParse :: [TokenRegex] -> Either String SyntaxTreeRegex
+regexParse input = do
+    (tree, rest) <- runParser parserOr input
+    if null rest then Left "Invalid Rule."
+    else Right tree

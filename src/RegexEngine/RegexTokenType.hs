@@ -44,4 +44,19 @@ data SyntaxTreeRegex
     | STStart
     | STEnd
     |   STVoid -- Used to void Value, should not be in the return result
-    deriving Show
+
+instance Show SyntaxTreeRegex where
+    show (STConcat t1 t2) = show t1 ++ show t2
+    show (STExpr c) = [c]
+    show STAny = "."
+    show (STOr t1 t2) = show t1 ++ '|' : show t2
+    show (STBracket isMatch content) = '[' : (if isMatch then "" else "^") ++ content ++ "]"
+    show (STQuote content) = show content
+    show (STGroup t) = '(' : show t ++ ")"
+    show (STRepetionMany t) = show t ++ "*"
+    show (STRepetionSome t) = show t ++ "+"
+    show (STRepetionMaybe t) = show t ++ "?"
+    show (STRepetionCustom n1 n2 t) = show t ++ '{' : show n1 ++ ',' : show n2 ++ "}"
+    show STStart = "^"
+    show STEnd = "$"
+    show STVoid = ":VOID:"

@@ -14,6 +14,7 @@ import InputDef.LexDefinition ( LexFile(LexFile), Rule(RRule), printList )
 import RegexEngine.RegexLexing ( translateRegex, regexParse )
 import InputDef.InputChar ( toString, InputChar (InputChar) )
 import Error (formatErr)
+import RegexEngine.RegexParser (parserOr)
 
 
 main :: IO ()
@@ -32,11 +33,12 @@ runProgram _ input = do
     case a of
         Left a' -> putStr a'
         Right (LexFile defs rules usr, _) -> do
-            let ruleList =    map parseRules
+            let ruleList =    map (parseRules . tokenizeRules)
                             . mapMaybe (translateRule defs)
                             . filter isRRule
                             $ rules
-            when (not (null $ lefts ruleList) || length ruleList /= length rules ) $ mapM_ putStrLn (lefts ruleList) >> exitFailure
+            when ( not (null $ lefts ruleList) || length ruleList /= length rules ) 
+                $ mapM_ putStrLn (lefts ruleList) >> exitFailure
             putStrLn "PASS"
             printList ruleList
     return ()
@@ -46,7 +48,13 @@ runProgram _ input = do
     where
         isRRule (RRule {})= True
         isRRule _ = False
-        parseRules s =
+        parseRules (Right t) =
+            case runParser parserOr (fst t) of  
+                Left err -> Left $ formatErr (snd t) err
+                Right (reg, []) -> Right (reg, snd t)
+                Right (_, _) -> Left $ formatErr (snd t) "Unvalide Regex Expression"
+        parseRules (Left err) = Left err
+        tokenizeRules s =
             case runParser regexParse (fst s) of  
                 Left err -> Left $ formatErr (snd s) err
                 Right (reg, []) -> Right (reg, snd s)
