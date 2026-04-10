@@ -21,9 +21,19 @@ parserAtom = Parser tokenize
         tokenize _ = Left ""
 
 
+parseRepetition :: Parser[TokenRegex] SyntaxTreeRegex
+parseRepetition = do
+    base <- parserAtom
+    Parser (\case
+        TRepetionMany: rs -> pure (STRepetionMany base, rs)
+        TRepetionSome: rs -> pure (STRepetionSome base, rs)
+        TRepetionMaybe: rs -> pure (STRepetionMaybe base, rs)
+        _ -> Left "")
+        <|> pure base
+
 parserConcat :: Parser [TokenRegex] SyntaxTreeRegex
 parserConcat = do
-    first <- parserAtom
+    first <- parseRepetition
     rest first
     where
         rest left =
