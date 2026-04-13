@@ -1,4 +1,6 @@
-module RegexEngine.RegexTokenType where 
+module RegexEngine.RegexTokenType where
+import Data.List (intercalate)
+import GHC.Base (Alternative(empty))
 
 type IsMatch = Bool
 
@@ -11,7 +13,7 @@ data BracketToken
     | BCollating String -- [.String.]
     deriving (Show, Eq)
 
-data TokenRegex 
+data TokenRegex
     = TChar Char
     | TAny -- . -> Cannot be Null or Newline (0, 10)
     | TOr
@@ -29,12 +31,12 @@ data TokenRegex
 
 
     -- Syntax Tree Regex
-data SyntaxTreeRegex 
+data SyntaxTreeRegex
     = STConcat SyntaxTreeRegex SyntaxTreeRegex
     | STExpr Char
     | STAny
     | STOr SyntaxTreeRegex SyntaxTreeRegex
-    | STBracket IsMatch [Char]
+    | STBracket IsMatch [Char] [String]  -- [char] for single char match || [String] for collating match 
     | STQuote String
     | STGroup SyntaxTreeRegex
     | STRepetionMany SyntaxTreeRegex
@@ -50,7 +52,7 @@ instance Show SyntaxTreeRegex where
     show (STExpr c) = [c]
     show STAny = "."
     show (STOr t1 t2) = show t1 ++ '|' : show t2
-    show (STBracket isMatch content) = '[' : (if isMatch then "" else "^") ++ content ++ "]"
+    show (STBracket isMatch content collating) = '[' : (if isMatch then "" else "^") ++ content ++ (if not . null $ collating then ':' : intercalate ":" collating ++ ":" else "" )++ "]"
     show (STQuote content) = show content
     show (STGroup t) = '(' : show t ++ ")"
     show (STRepetionMany t) = show t ++ "*"
